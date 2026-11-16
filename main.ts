@@ -130,6 +130,9 @@ interface Candidate {
   rating: number;
 }
 
+/** Memoized candidate lists: the sort is deterministic and only the exhausted set changes it. */
+let candidatesCache = new Map<string, Candidate[]>();
+
 /**
  * The free models that can serve one request, best first by the quality table's rating, with a
  * deterministic tie-break on provider then model id. An OpenAI JSON-mode request never goes to an
@@ -137,6 +140,9 @@ interface Candidate {
  * to be exhausted are left out.
  */
 function candidatesFor(requires: Requirement, jsonModeOpenAI: boolean): Candidate[] {
+  const cacheKey = JSON.stringify(requires) + '|' + (jsonModeOpenAI ? '1' : '0') + '|' + [...exhaustedProviders].sort().join(',');
+  const cached = candidatesCache.get(cacheKey);
+  if (cached !== undefined) return cached;
   const out: Candidate[] = [];
   for (const probe of probes) {
     if (!probe.ok) continue;
@@ -150,6 +156,7 @@ function candidatesFor(requires: Requirement, jsonModeOpenAI: boolean): Candidat
     }
   }
   out.sort((a, b) => b.rating - a.rating || (a.probe.provider.id < b.probe.provider.id ? -1 : a.probe.provider.id > b.probe.provider.id ? 1 : 0) || (a.model.id < b.model.id ? -1 : a.model.id > b.model.id ? 1 : 0));
+  candidatesCache.set(cacheKey, out);
   return out;
 }
 
